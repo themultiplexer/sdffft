@@ -64,14 +64,49 @@ const char* fragmentShaderSource = R"(
     const int MAX_MARCHING_STEPS = 255;
     const float MIN_DIST = 0.0;
     const float MAX_DIST = 100.0;
-    const float EPSILON = 0.00001;
+    const float EPSILON = 0.0001;
 
-    /**
-    * Signed distance function for a sphere centered at the origin with radius 1.0;
-    */
+    float capsuleSDF( vec3 p, vec3 a, vec3 b, float r )
+    {
+        vec3 pa = p - a, ba = b - a;
+        float h = clamp( dot(pa,ba)/dot(ba,ba), 0.0, 1.0 );
+        return length( pa - ba*h ) - r;
+    }
+
     float sphereSDF(vec3 samplePoint) {
         return length(samplePoint) - 0.8;
     }
+
+    mat3 rotateX(float theta) {
+        float c = cos(theta);
+        float s = sin(theta);
+        return mat3(
+            vec3(1, 0, 0),
+            vec3(0, c, -s),
+            vec3(0, s, c)
+        );
+    }
+
+    mat3 rotateZ(float theta) {
+        float c = cos(theta);
+        float s = sin(theta);
+        return mat3(
+            vec3(c, -s, 0),
+            vec3(s, c, 0),
+            vec3(0, 0, 1)
+        );
+    }
+
+    mat3 rotateY(float theta) {
+        float c = cos(theta);
+        float s = sin(theta);
+        return mat3(
+            vec3(c, 0, s),
+            vec3(0, 1, 0),
+            vec3(-s, 0, c)
+        );
+    }
+
     float smoothMax(float a, float b, float k) { return log(exp(k * a) + exp(k * b)) / k; }
     float smoothMin(float a, float b, float k) { return -smoothMax(-a, -b, k); }
     /**
@@ -82,10 +117,20 @@ const char* fragmentShaderSource = R"(
     * negative indicating inside.
     */
     float sceneSDF(vec3 samplePoint) {
-        float c1 = sphereSDF(samplePoint + vec3(0.9, 0.0, 0.0));
-        float c2 = sphereSDF(samplePoint - vec3(0.9, 0.0, 0.0));
+        float d = 1.0;
 
-        return smoothMin(c1, c2, ((sin(iTime * 2.0) + 1.0) / 2.0) * 11.0 + 1.0);
+        for(int i = 0; i < 20; i++) {
+            float p = (i/20.0) * 6.282;
+            //float dist = capsuleSDF(samplePoint * rotateY(p) * rotateX(iTime), vec3(0.4, 0.5, -0.5), vec3(0.5, 0.5, 1.0), 0.1);
+            float dist = capsuleSDF((samplePoint * rotateZ(p) + vec3(-1.0, 0.0, 0.0)) * rotateY(iTime + p/2.0), vec3(0.0, 0.0, -0.6), vec3(0.0, 0.0, 0.6), 0.1);
+
+            //d = smoothMin(d, dist, ((sin(iTime * 4.2) + 1.0) / 2.0) * 5.0 + 5.0);
+            d = smoothMin(d, dist, 9.0);
+            //d = min(d, dist);
+        }
+        
+
+        return d;
     }
 
     /**
@@ -134,6 +179,16 @@ const char* fragmentShaderSource = R"(
             sceneSDF(vec3(p.x + EPSILON, p.y, p.z)) - sceneSDF(vec3(p.x - EPSILON, p.y, p.z)),
             sceneSDF(vec3(p.x, p.y + EPSILON, p.z)) - sceneSDF(vec3(p.x, p.y - EPSILON, p.z)),
             sceneSDF(vec3(p.x, p.y, p.z  + EPSILON)) - sceneSDF(vec3(p.x, p.y, p.z - EPSILON))
+        ));
+    }
+
+    // Crashes system bruh
+    vec3 estimateNormalRed(vec3 p) {
+        float fp = sceneSDF(p);
+        return normalize(vec3(
+            sceneSDF(vec3(p.x + EPSILON, p.y, p.z)) - fp,
+            sceneSDF(vec3(p.x, p.y + EPSILON, p.z)) - fp,
+            sceneSDF(vec3(p.x, p.y, p.z  + EPSILON)) - fp
         ));
     }
 
@@ -191,12 +246,12 @@ const char* fragmentShaderSource = R"(
         const vec3 ambientLight = 0.5 * vec3(1.0, 1.0, 1.0);
         vec3 color = ambientLight * k_a;
         
-        vec3 light1Pos = vec3(4.0 * sin(iTime), 2.0, 4.0 * cos(iTime));
-        vec3 light1Intensity = vec3(0.4, 0.4, 0.4);
+        vec3 light1Pos = vec3(4.0, 2.0, 4.0);
+        vec3 light1Intensity = vec3(0.8, 0.8, 0.8);
         
         color += phongContribForLight(k_d, k_s, alpha, p, eye, light1Pos, light1Intensity);
-        
-        vec3 light2Pos = vec3(2.0 * sin(0.37 * iTime), 2.0 * cos(0.37 * iTime), 2.0);
+
+        vec3 light2Pos = vec3(-4.0, 2.0, 2.0);
         vec3 light2Intensity = vec3(0.4, 0.4, 0.4);
         
         color += phongContribForLight(k_d, k_s, alpha, p, eye, light2Pos, light2Intensity);    
@@ -206,7 +261,6 @@ const char* fragmentShaderSource = R"(
     float N21(vec2 p){
         return fract(sin(p.x * 100. + p.y * 6574.) * 5647.);
     }
-
 
     float SmoothNoise(vec2 uv){
         vec2 lv = fract(uv * 10.);
@@ -238,12 +292,18 @@ const char* fragmentShaderSource = R"(
         vec3 p = eye + dist * dir;
 
         vec3 K_a = vec3(0.1, 0.0, 0.0);
-        vec3 K_d = vec3(1.0, 0.0, 0.0);
+        vec3 K_d = vec3(1.0, 1.0, 0.0);
         vec3 K_s = vec3(1.0, 1.0, 1.0);
         float shininess = 10.0;
 
-        K_d *= SmoothNoise(fragCoord * vec2(dist) + sin(iTime));
-        K_a *= SmoothNoise(fragCoord * vec2(dist) + sin(iTime));
+        vec3 gradient = estimateNormal(p);
+        float theta = atan(gradient.y, gradient.x);    
+        float phi = acos(gradient.z);
+        float u = (theta + 3.1415) / (2 * 3.1415);
+        float v = phi / 3.1415;
+
+        K_d *= SmoothNoise(vec2(u * 10.0, 0));
+        //K_d = vec3(u, v, 0.0);
 
         vec3 color = phongIllumination(K_a, K_d, K_s, shininess, p, eye);
 
@@ -345,7 +405,7 @@ int main() {
         glfwPollEvents();
 
         // Rendering commands
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClearColor(0.76f, 0.33f, 0.37f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
         // Use the shader program
