@@ -128,7 +128,7 @@ const char* fragmentShaderSource = R"(
             float lat = acos(op.z / r);
             lon = mod(lon, 0.4) - 0.2;
             vec3 samplePoint = vec3(r * sin(lat) * cos(lon), r * sin(lat) * sin(lon), r * cos(lat));
-            d = capsuleSDF(samplePoint, vec3(1.0, 0.0, -0.6) * rotateY(iTime), vec3(1.0, 0.0, 0.6) * rotateY(iTime), 0.1);
+            d = capsuleSDF(samplePoint, vec3(0.0, 0.0, -0.6) * rotateY(iTime) + vec3(1.0, 0.0, 0.0), vec3(1.0, 0.0, 0.6) * rotateY(iTime) + vec3(1.0, 0.0, 0.0), 0.1);
             //d = smoothMin(orig, d, 10.0);
         } else {
             for(int i = 0; i < 20; i++) {
