@@ -119,15 +119,30 @@ const char* fragmentShaderSource = R"(
     float sceneSDF(vec3 samplePoint) {
         float d = 1.0;
 
-        for(int i = 0; i < 20; i++) {
-            float p = (i/20.0) * 6.282;
-            //float dist = capsuleSDF(samplePoint * rotateY(p) * rotateX(iTime), vec3(0.4, 0.5, -0.5), vec3(0.5, 0.5, 1.0), 0.1);
-            float dist = capsuleSDF((samplePoint * rotateZ(p) + vec3(-1.0, 0.0, 0.0)) * rotateY(iTime + p/2.0), vec3(0.0, 0.0, -0.6), vec3(0.0, 0.0, 0.6), 0.1);
+        if(true) {
+            vec3 op = samplePoint;
+            float orig = capsuleSDF(samplePoint, vec3(0.0, 0.0, -0.6) * rotateY(iTime), vec3(0.0, 0.0, 0.6) * rotateY(iTime), 0.1);
 
-            //d = smoothMin(d, dist, ((sin(iTime * 4.2) + 1.0) / 2.0) * 5.0 + 5.0);
-            d = smoothMin(d, dist, 9.0);
-            //d = min(d, dist);
+            float r = sqrt( op.x * op.x + op.y * op.y + op.z * op.z);
+            float lon = atan(op.y, op.x);
+            float lat = acos(op.z / r);
+            lon = mod(lon, 0.4) - 0.2;
+            vec3 samplePoint = vec3(r * sin(lat) * cos(lon), r * sin(lat) * sin(lon), r * cos(lat));
+            d = capsuleSDF(samplePoint, vec3(1.0, 0.0, -0.6) * rotateY(iTime), vec3(1.0, 0.0, 0.6) * rotateY(iTime), 0.1);
+            //d = smoothMin(orig, d, 10.0);
+        } else {
+            for(int i = 0; i < 20; i++) {
+                float p = (i/20.0) * 6.282;
+                //float dist = capsuleSDF(samplePoint * rotateY(p) * rotateX(iTime), vec3(0.4, 0.5, -0.5), vec3(0.5, 0.5, 1.0), 0.1);
+                vec3 p1 = vec3(0.0, 0.0, -0.6) * rotateY(iTime + p/2.0);
+                vec3 p2 = -p1;
+                float dist = capsuleSDF((samplePoint * rotateZ(p) + vec3(-1.0, 0.0, 0.0)) , p1, p2, 0.1);
+                //d = smoothMin(d, dist, ((sin(iTime * 4.2) + 1.0) / 2.0) * 5.0 + 5.0);
+                //d = smoothMin(d, dist, 9.0);
+                d = min(d, dist);
+            }
         }
+
         
 
         return d;
@@ -209,7 +224,7 @@ const char* fragmentShaderSource = R"(
     * See https://en.wikipedia.org/wiki/Phong_reflection_model#Description
     */
     vec3 phongContribForLight(vec3 k_d, vec3 k_s, float alpha, vec3 p, vec3 eye, vec3 lightPos, vec3 lightIntensity) {
-        vec3 N = estimateNormal(p);
+        vec3 N = estimateNormalRed(p);
         vec3 L = normalize(lightPos - p);
         vec3 V = normalize(eye - p);
         vec3 R = normalize(reflect(-L, N));
